@@ -91,3 +91,4 @@ mainline-mod: true
 houdini: true
 neuralnetworks: true
 evs:false
+docker: true
