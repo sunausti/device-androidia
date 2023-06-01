@@ -58,20 +58,22 @@ function install() {
   local backend="drm"
   local device="/dev/dri/renderD128"
   local size="1920x1080"
+  local privileged="true"
 
   local help=$(
     cat <<EOF
-Usage: $SELF install [-b <backend>] [-c <container-id>] [-d <device>] [-s <size>]
+Usage: $SELF install [-b <backend>] [-c <container-id>] [-d <device>] [-s <size>] [-u]
   Install LIC for android ivi
 
   -b <backend>:       weston backend, default: $backend
   -d <device>:        gbm device for headless backend, default: $device
   -s <size>:          resolution of LIC in headless backend, default: $size
+  -u:                 create container with unprivileged mode
   -h:                 print the usage message
 EOF
   )
 
-  while getopts 'b:d:s:h' opt; do
+  while getopts 'b:d:s:hu' opt; do
     case $opt in
     b)
       backend=$OPTARG
@@ -81,6 +83,9 @@ EOF
       ;;
     s)
       size=$OPTARG
+      ;;
+    u)
+      privileged="false"
       ;;
     h)
       echo "$help" && exit
@@ -97,6 +102,7 @@ EOF
   if [ $backend == "headless" ]; then
     echo "size=$size"
     echo "width=$width height=$height"
+    echo "privileged=$privileged"
   fi
 
   if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep -w steam)" ]]; then
@@ -112,7 +118,11 @@ EOF
   elif [ $backend == "headless" ]; then
     rm -rf -v /data/docker/image/workdir/ipc
     mkdir -p -v /data/docker/image/workdir/ipc
-    docker create -ti --privileged --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e BACKEND=$backend -e CONTAINER_ID=0 -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ -v /data/docker/steam:/home/wid/.steam -v /data/docker/image/workdir/ipc:/workdir/ipc --shm-size 8G --ulimit nofile=524288:524288 --name steam steam
+    if [ $privileged == "true" ]; then
+      docker create -ti --privileged --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e BACKEND=$backend -e CONTAINER_ID=0 -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ -v /data/docker/steam:/home/wid/.steam -v /data/docker/image/workdir/ipc:/workdir/ipc --shm-size 8G --ulimit nofile=524288:524288 --name steam steam
+    else
+      docker create -ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e BACKEND=$backend -e CONTAINER_ID=0 -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ -v /data/docker/steam:/home/wid/.steam -v /data/docker/image/workdir/ipc:/workdir/ipc --shm-size 8G --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --ulimit nofile=524288:524288 --name steam steam
+    fi
   fi
   msg "Done!"
 }
