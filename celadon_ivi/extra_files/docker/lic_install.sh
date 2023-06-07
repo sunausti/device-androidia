@@ -58,7 +58,12 @@ function install() {
   local backend="drm"
   local device="/dev/dri/renderD128"
   local size="1920x1080"
-  local privileged="true"
+  local privileged="false"
+  local number=$(getprop persist.lic.number)
+
+  if [ -z $number ]; then
+    number=1
+  fi
 
   local help=$(
     cat <<EOF
@@ -68,12 +73,13 @@ Usage: $SELF install [-b <backend>] [-c <container-id>] [-d <device>] [-s <size>
   -b <backend>:       weston backend, default: $backend
   -d <device>:        gbm device for headless backend, default: $device
   -s <size>:          resolution of LIC in headless backend, default: $size
-  -u:                 create container with unprivileged mode
+  -p:                 create container with privileged mode
+  -n <number>:        LIC instance number, default: $number
   -h:                 print the usage message
 EOF
   )
 
-  while getopts 'b:d:s:hu' opt; do
+  while getopts 'b:d:s:hpn:' opt; do
     case $opt in
     b)
       backend=$OPTARG
@@ -84,8 +90,11 @@ EOF
     s)
       size=$OPTARG
       ;;
-    u)
-      privileged="false"
+    p)
+      privileged="true"
+      ;;
+    n)
+      number=$OPTARG
       ;;
     h)
       echo "$help" && exit
@@ -98,50 +107,76 @@ EOF
   IFS="x" read width height <<<"$size"
 
   echo "Install LIC:"
-  echo "backend=$backend"
+  echo "number = $number"
+  echo "backend = $backend"
   if [ $backend == "headless" ]; then
-    echo "size=$size"
-    echo "width=$width height=$height"
-    echo "privileged=$privileged"
+    echo "size = $size"
+    echo "width = $width height = $height"
+    echo "privileged = $privileged"
+    echo "device = $device"
   fi
 
-  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep -w steam)" ]]; then
+  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep steam)" ]]; then
     msg "Stop and rm existed steam container(Keep the image as it will be used in 'docker create')..."
-    docker stop steam >/dev/null 2>&1
-    docker rm steam >/dev/null 2>&1
+    docker stop $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
+    sync
+    docker rm -f $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
+    sync
   fi
 
   msg "create steam container with $backend backend..."
 
+  create_opts="-ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ --shm-size 8G --user wid"
+
   if [ $backend == "drm" ]; then
-    docker create -ti --privileged --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ -v /data/docker/steam:/home/wid/.steam --shm-size 8G --name steam steam
+    create_opts="$create_opts --privileged -v /data/docker/steam:/home/wid/.steam --name steam --hostname steam"
+    docker create $create_opts steam
   elif [ $backend == "headless" ]; then
     rm -rf -v /data/docker/image/workdir/ipc
     mkdir -p -v /data/docker/image/workdir/ipc
-    if [ $privileged == "true" ]; then
-      docker create -ti --privileged --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e BACKEND=$backend -e CONTAINER_ID=0 -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ -v /data/docker/steam:/home/wid/.steam -v /data/docker/image/workdir/ipc:/workdir/ipc --shm-size 8G --ulimit nofile=524288:524288 --name steam steam
+    create_opts="$create_opts -e BACKEND=$backend -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -v /data/docker/image/workdir/ipc:/workdir/ipc --ulimit nofile=524288:524288"
+
+    if [ $number -gt 1 ]; then
+      for i in $(seq 0 $(expr $number - 1)); do
+        mkdir -p /data/docker/steam$i
+        delta_opts="$create_opts -v /data/docker/steam$i:/home/wid/.steam -e CONTAINER_ID=$i --name steam$i --hostname steam$i"
+        if [ $privileged == "true" ]; then
+          docker create $delta_opts --privileged steam
+        else
+          docker create $delta_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device /dev/dri --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN steam
+        fi
+      done
     else
-      docker create -ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e BACKEND=$backend -e CONTAINER_ID=0 -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ -v /data/docker/steam:/home/wid/.steam -v /data/docker/image/workdir/ipc:/workdir/ipc --shm-size 8G --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --ulimit nofile=524288:524288 --name steam steam
+      create_opts="$create_opts -v /data/docker/steam:/home/wid/.steam -e CONTAINER_ID=0 --name steam --hostname steam"
+      if [ $privileged == "true" ]; then
+        docker create $create_opts --privileged steam
+      else
+        docker create $create_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device /dev/dri --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN steam
+      fi
     fi
   fi
+
   msg "Done!"
 }
 
 function uninstall() {
-  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep -w steam)" ]]; then
+  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep steam)" ]]; then
     msg "Delete existed LIC container and image..."
-    docker stop steam >/dev/null 2>&1
-    docker rm steam >/dev/null 2>&1
-    docker rmi steam >/dev/null 2>&1
+    docker stop $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
+    sync
+    docker rm -f $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
+    sync
+    docker rmi $(docker image list | awk '$1~/^steam*/ {print $1}')
+    sync
   fi
 }
 
 function start() {
-  docker start steam
+  docker start $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
 }
 
 function stop() {
-  docker stop -t0 steam
+  docker stop -t 0 $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
 }
 
 function main() {
