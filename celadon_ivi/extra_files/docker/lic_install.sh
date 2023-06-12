@@ -134,7 +134,7 @@ EOF
   elif [ $backend == "headless" ]; then
     rm -rf -v /data/docker/image/workdir/ipc
     mkdir -p -v /data/docker/image/workdir/ipc
-    create_opts="$create_opts -e BACKEND=$backend -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -v /data/docker/image/workdir/ipc:/workdir/ipc --ulimit nofile=524288:524288"
+    create_opts="$create_opts -e BACKEND=$backend -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -e HEADLESS=true -v /data/docker/image/workdir/ipc:/workdir/ipc --ulimit nofile=524288:524288"
 
     if [ $number -gt 1 ]; then
       for i in $(seq 0 $(expr $number - 1)); do
