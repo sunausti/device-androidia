@@ -35,7 +35,7 @@ EOF
 
   if [[ ! -z "$http_proxy" ]]; then
     msg "restart dockerd under proxy environment..."
-    killall dockerd
+    killall dockerd-dev
     while [[ ! -z "$(ps -A | awk '{print $NF}' | grep -w dockerd)" ]]; do
       msg "wait for dockerd to terminated..."
       sleep 1
