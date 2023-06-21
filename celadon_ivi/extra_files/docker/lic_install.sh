@@ -60,6 +60,8 @@ function install() {
   local size="1920x1080"
   local privileged="false"
   local number=$(getprop persist.lic.number)
+  local mem_total=$(expr $(cat /proc/meminfo | grep MemTotal | awk '{print $2}') / 1024 / 1024)
+  memory_size=${mem_total}g
 
   if [ -z $number ]; then
     number=1
@@ -75,11 +77,12 @@ Usage: $SELF install [-b <backend>] [-c <container-id>] [-d <device>] [-s <size>
   -s <size>:          resolution of LIC in headless backend, default: $size
   -p:                 create container with privileged mode
   -n <number>:        LIC instance number, default: $number
+  -m <memory_size>    Memory size(a positive integer, followed by a suffix of b, k, m, g, to indicate bytes, kilobytes, megabytes, or gigabytes). Maximum and default: $memory_size
   -h:                 print the usage message
 EOF
   )
 
-  while getopts 'b:d:s:hpn:' opt; do
+  while getopts 'b:d:s:hpn:m:' opt; do
     case $opt in
     b)
       backend=$OPTARG
@@ -96,6 +99,9 @@ EOF
     n)
       number=$OPTARG
       ;;
+    m)
+      memory_size=$OPTARG
+      ;;
     h)
       echo "$help" && exit
       ;;
@@ -109,6 +115,7 @@ EOF
   echo "Install LIC:"
   echo "number = $number"
   echo "backend = $backend"
+  echo "memory_size = $memory_size"
   if [ $backend == "headless" ]; then
     echo "size = $size"
     echo "width = $width height = $height"
@@ -126,7 +133,7 @@ EOF
 
   msg "create steam container with $backend backend..."
 
-  create_opts="-ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ --shm-size 8G --user wid"
+  create_opts="-ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ --shm-size 8G --user wid --memory=$memory_size"
 
   if [ $backend == "drm" ]; then
     create_opts="$create_opts --privileged -v /data/docker/steam:/home/wid/.steam --name steam --hostname steam"
