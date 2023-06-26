@@ -966,6 +966,7 @@ $(PRODUCT_OUT)/system.img:  $(DOCKERD_ENV_RESOLV_CONF)
 LIC_IMAGE_SOURCE := $(PRODUCT_OUT)/vendor/etc/docker/weston-in-docker.tar
 $(LIC_IMAGE_SOURCE):
 	@mkdir -p $(PRODUCT_OUT)/vendor/etc/docker
-	@tar --exclude .git -cf $(PRODUCT_OUT)/vendor/etc/docker/weston-in-docker.tar -C $(TOP)/vendor/intel/weston-in-docker/ .
+	@tar --exclude .git --exclude dm -cf $(PRODUCT_OUT)/vendor/etc/docker/weston-in-docker.tar -C $(TOP)/vendor/intel/weston-in-docker/ .
+	@tar -cf $(PRODUCT_OUT)/vendor/etc/docker/dm.tar -C $(TOP)/vendor/intel/weston-in-docker/dm/ .
 $(PRODUCT_OUT)/vendor.img: $(LIC_IMAGE_SOURCE)
 # ------------------ END MIX-IN DEFINITIONS ------------------

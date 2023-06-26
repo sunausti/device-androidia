@@ -907,6 +907,7 @@ PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/extra_files/docker/containerd-shim-runc-v2:/vendor/bin/containerd-shim-runc-v2 \
     $(LOCAL_PATH)/extra_files/docker/docker:/vendor/bin/docker \
     $(LOCAL_PATH)/extra_files/docker/dockerd:/vendor/bin/dockerd \
+    $(LOCAL_PATH)/extra_files/docker/dockerd-dev:/vendor/bin/dockerd-dev \
     $(LOCAL_PATH)/extra_files/docker/runc:/vendor/bin/runc \
     $(LOCAL_PATH)/extra_files/docker/99-ignore-keyboard.rules:/vendor/etc/docker/config/99-ignore-keyboard.rules \
     $(LOCAL_PATH)/extra_files/docker/99-ignore-mouse.rules:/vendor/etc/docker/config/99-ignore-mouse.rules \

@@ -44,6 +44,9 @@ EOF
     sleep 20
   fi
 
+  msg "build devicemanager docker image"
+  cat /vendor/etc/docker/dm.tar | docker build - --network=host --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t dm
+
   if [ $ai_tools == "true" ]; then
     msg "building steam docker with Intel tensorflow extension for GPU"
     cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg SETUP_AI_TOOLS=true --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
@@ -52,6 +55,16 @@ EOF
     cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
   fi
   msg "Done!"
+}
+
+function cleanup_container() {
+  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep $1)" ]]; then
+    msg "Stop and rm existed $1 container(Keep the image as it will be used in 'docker create')..."
+    docker stop $(docker ps -a | awk '$NF~/^'$1'*/ {print $NF}')
+    sync
+    docker rm -f $(docker ps -a | awk '$NF~/^'$1'*/ {print $NF}')
+    sync
+  fi
 }
 
 function install() {
@@ -123,13 +136,11 @@ EOF
     echo "device = $device"
   fi
 
-  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep steam)" ]]; then
-    msg "Stop and rm existed steam container(Keep the image as it will be used in 'docker create')..."
-    docker stop $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
-    sync
-    docker rm -f $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
-    sync
-  fi
+  cleanup_container dm
+  cleanup_container steam
+
+  msg "create dm container..."
+  docker create --name dm --privileged -v /dev/binder:/dev/binder dm
 
   msg "create steam container with $backend backend..."
 
@@ -179,10 +190,13 @@ function uninstall() {
 }
 
 function start() {
+  docker start dm
+  sleep 1
   docker start $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
 }
 
 function stop() {
+  docker stop -t 0 dm
   docker stop -t 0 $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
 }
 
