@@ -925,7 +925,7 @@ PRODUCT_PACKAGES += sumClientInAndroid \
     liblic-epic \
     liblic-genshin \
     liblic-steam \
-    DockerManager
+    ContainerManager
 
 PRODUCT_PROPERTY_OVERRIDES += \
     vendor.nn.hal.grpc_socket_path=/data/vendor/neuralnetworks/ai.socket \
