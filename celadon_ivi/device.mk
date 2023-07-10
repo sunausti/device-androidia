@@ -161,6 +161,11 @@ PRODUCT_DEFAULT_PROPERTY_OVERRIDES += ro.vendor.boot.moduleslocation=/$(KERNEL_M
 ##############################################################
 PRODUCT_PACKAGES += sepolicy-areq-checker
 ##############################################################
+# Source: device/intel/mixins/groups/multi-passenger/false/product.mk
+##############################################################
+# multi-passenger support
+PRODUCT_PACKAGE_OVERLAYS += $(LOCAL_PATH)/overlay-multi_passenger
+##############################################################
 # Source: device/intel/mixins/groups/bluetooth/btusb/product.mk
 ##############################################################
 
@@ -301,7 +306,7 @@ endif
 PRODUCT_COPY_FILES += \
     $(LOCAL_PATH)/init.recovery.rc:root/init.recovery.$(TARGET_PRODUCT).rc \
     $(LOCAL_PATH)/init.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/hw/init.$(TARGET_PRODUCT).rc \
-    $(LOCAL_PATH)/ueventd.rc:$(TARGET_COPY_OUT_VENDOR)/ueventd.rc \
+    $(LOCAL_PATH)/ueventd.rc:$(TARGET_COPY_OUT_VENDOR)/etc/ueventd.rc \
 
 PRODUCT_PACKAGES += MultiDisplaySecondaryHomeTestLauncher
 
@@ -540,9 +545,9 @@ $(call inherit-product, $(SRC_TARGET_DIR)/product/emulated_storage.mk)
 PRODUCT_COPY_FILES += \
         frameworks/native/data/etc/android.hardware.ethernet.xml:vendor/etc/permissions/android.hardware.ethernet.xml
 ##############################################################
-# Source: device/intel/mixins/groups/camera-ext/ext-camera-only/product.mk
+# Source: device/intel/mixins/groups/camera-ext/ivi/product.mk
 ##############################################################
-# Camera: Device-specific configuration files. Supports only External USB camera, no CSI support
+# Camera: Device-specific configuration files.
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.camera.autofocus.xml:vendor/etc/permissions/android.hardware.camera.autofocus.xml \
     frameworks/native/data/etc/android.hardware.camera.external.xml:vendor/etc/permissions/android.hardware.camera.external.xml \
@@ -551,26 +556,10 @@ PRODUCT_COPY_FILES += \
 
 # External camera service
 PRODUCT_PACKAGES += android.hardware.camera.provider@2.4-external-service \
-                    android.hardware.camera.provider@2.4-service_64 \
                     android.hardware.camera.provider@2.4-impl
-#VHAL camera
-PRODUCT_PACKAGES += camera.$(TARGET_BOARD_PLATFORM) \
-                    camera.$(TARGET_BOARD_PLATFORM).jpeg
 
-PRODUCT_PROPERTY_OVERRIDES += ro.vendor.remote.sf.fake_camera ="both" \
-                              ro.vendor.camera.in_frame_format.h264=false \
-                              ro.vendor.camera.in_frame_format.i420=true \
-                              ro.vendor.camera.decode.vaapi=false \
-                              ro.vendor.remote.sf.back_camera_hal= \
-                              ro.vendor.remote.sf.front_camera_hal= \
-                              ro.vendor.camera.transference="VSOCK" \
-                              vendor.camera.external="VHAL"
-#removing not required apps
-# Only include test apps in eng or userdebug builds.
-#PRODUCT_PACKAGES_DEBUG += TestingCamera
 
 PRODUCT_PACKAGES += MultiCameraApp
-PRODUCT_PACKAGES += avmapp
 ##############################################################
 # Source: device/intel/mixins/groups/rfkill/true/product.mk
 ##############################################################

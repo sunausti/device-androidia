@@ -544,13 +544,12 @@ BOARD_SEPOLICY_M4DEFS += module_hwc_info_service=true
 ##############################################################
 BOARD_SEPOLICY_DIRS += $(INTEL_PATH_SEPOLICY)/ethernet/common
 ##############################################################
-# Source: device/intel/mixins/groups/camera-ext/ext-camera-only/BoardConfig.mk
+# Source: device/intel/mixins/groups/camera-ext/ivi/BoardConfig.mk
 ##############################################################
-# Enable only USB camera and disable all CSI Cameras
 BOARD_CAMERA_USB_STANDALONE = true
 
 # SELinux support for USB camera
-BOARD_SEPOLICY_DIRS += $(INTEL_PATH_SEPOLICY)/camera-ext/ext-camera-only
+BOARD_SEPOLICY_DIRS += $(INTEL_PATH_SEPOLICY)/camera-ext/ivi
 ##############################################################
 # Source: device/intel/mixins/groups/rfkill/true/BoardConfig.mk
 ##############################################################
