@@ -76,17 +76,23 @@ function install() {
   local mem_total=$(expr $(cat /proc/meminfo | grep MemTotal | awk '{print $2}') / 1024 / 1024)
   memory_size=${mem_total}g
 
+  local lic_device=$(getprop persist.lic.device)
+  if [ -n "$lic_device" ] && [ -c $lic_device ]; then
+    device=$lic_device
+  elif [ -c /dev/dri/renderD129 ]; then
+    device="/dev/dri/renderD129"
+  fi
+
   if [ -z $number ]; then
     number=1
   fi
 
   local help=$(
     cat <<EOF
-Usage: $SELF install [-b <backend>] [-c <container-id>] [-d <device>] [-s <size>] [-u]
+Usage: $SELF install [-b <backend>] [-s <size>] [-p] [-n <number>] [m <memory_size>]
   Install LIC for android ivi
 
   -b <backend>:       weston backend, default: $backend
-  -d <device>:        gbm device for headless backend, default: $device
   -s <size>:          resolution of LIC in headless backend, default: $size
   -p:                 create container with privileged mode
   -n <number>:        LIC instance number, default: $number
@@ -99,9 +105,6 @@ EOF
     case $opt in
     b)
       backend=$OPTARG
-      ;;
-    d)
-      device=$OPTARG
       ;;
     s)
       size=$OPTARG
@@ -161,7 +164,7 @@ EOF
         if [ $privileged == "true" ]; then
           docker create $delta_opts --privileged steam
         else
-          docker create $delta_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device /dev/dri --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN steam
+          docker create $delta_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN steam
         fi
       done
     else
@@ -169,7 +172,7 @@ EOF
       if [ $privileged == "true" ]; then
         docker create $create_opts --privileged steam
       else
-        docker create $create_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device /dev/dri --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN steam
+        docker create $create_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN steam
       fi
     fi
   fi
