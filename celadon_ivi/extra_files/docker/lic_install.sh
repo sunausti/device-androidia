@@ -6,6 +6,7 @@ function msg() {
 
 function build() {
   local ai_tools="false"
+  local magic=intel
 
   local help=$(
     cat <<EOF
@@ -13,14 +14,18 @@ Usage: $SELF build [-a <ai-tools>]
   Build LIC for celadon ivi
 
   -a <ai-tools>:      enable ai tools, default: $ai_tools 
+  -m <magic>:         Magic. Default: $magic
   -h:                 print the usage message
 EOF
   )
 
-  while getopts 'ah' opt; do
+  while getopts 'am:h' opt; do
     case $opt in
     a)
       ai_tools="true"
+      ;;
+    m)
+      magic=$OPTARG
       ;;
     h)
       echo "$help" && exit
@@ -30,6 +35,7 @@ EOF
 
   echo "Build LIC:"
   echo "ai_tools=$ai_tools"
+  echo "magic=$magic"
 
   uninstall
 
@@ -49,10 +55,10 @@ EOF
 
   if [ $ai_tools == "true" ]; then
     msg "building steam docker with Intel tensorflow extension for GPU"
-    cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg SETUP_AI_TOOLS=true --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
+    cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg MAGIC=$magic --build-arg SETUP_AI_TOOLS=true --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
   else
     msg "build steam docker"
-    cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
+    cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg MAGIC=$magic --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
   fi
   msg "Done!"
 }
@@ -196,6 +202,10 @@ function start() {
   docker start dm
   sleep 1
   docker start $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
+  for name in $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
+  do
+    docker exec -u root $name bash -c "nohup /usr/bin/startup.sh > /home/wid/startup.log 2>&1 &"
+  done
 }
 
 function stop() {
