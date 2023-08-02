@@ -912,9 +912,11 @@ PRODUCT_PACKAGES += sumClientInAndroid \
     Steam \
     Genshin \
     Epic \
+    LIC \
     liblic-epic \
     liblic-genshin \
     liblic-steam \
+    liblic-proxy \
     ContainerManager
 
 PRODUCT_PROPERTY_OVERRIDES += \
