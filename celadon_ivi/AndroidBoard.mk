@@ -963,10 +963,10 @@ $(DOCKERD_ENV_RESOLV_CONF):
 	@ln -sf /data/docker/etc/resolv.conf $(PRODUCT_OUT)/system/etc/resolv.conf
 $(PRODUCT_OUT)/system.img:  $(DOCKERD_ENV_RESOLV_CONF)
 
-LIC_IMAGE_SOURCE := $(PRODUCT_OUT)/vendor/etc/docker/weston-in-docker.tar
+LIC_IMAGE_SOURCE := $(PRODUCT_OUT)/vendor/etc/docker/gamecore.tar
 $(LIC_IMAGE_SOURCE):
 	@mkdir -p $(PRODUCT_OUT)/vendor/etc/docker
-	@tar --exclude .git --exclude dm -cf $(PRODUCT_OUT)/vendor/etc/docker/weston-in-docker.tar -C $(TOP)/vendor/intel/weston-in-docker/ .
-	@tar -cf $(PRODUCT_OUT)/vendor/etc/docker/dm.tar -C $(TOP)/vendor/intel/weston-in-docker/dm/ .
+	@tar --exclude .git -cf $(PRODUCT_OUT)/vendor/etc/docker/gamecore.tar -C $(TOP)/vendor/intel/weston-in-docker/gamecore .
+	@tar --exclude .git -cf $(PRODUCT_OUT)/vendor/etc/docker/aicore.tar -C $(TOP)/vendor/intel/weston-in-docker/aicore .
 $(PRODUCT_OUT)/vendor.img: $(LIC_IMAGE_SOURCE)
 # ------------------ END MIX-IN DEFINITIONS ------------------

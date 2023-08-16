@@ -921,7 +921,8 @@ PRODUCT_PACKAGES += sumClientInAndroid \
 
 PRODUCT_PROPERTY_OVERRIDES += \
     vendor.nn.hal.grpc_socket_path=/data/vendor/neuralnetworks/ai.socket \
-    persist.lic.number=1
+    persist.lic.number=1 \
+    persist.lic.device=/dev/dri/renderD129
 ##############################################################
 # Source: device/intel/mixins/groups/debug-unresponsive/default/product.mk
 ##############################################################

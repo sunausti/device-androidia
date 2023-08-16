@@ -1,11 +1,58 @@
 #!/system/bin/sh
 
+CORECONTAINERS="gamecore aicore"
+COREIMAGES="gamecore aicore"
+
 function msg() {
   echo ">> $@"
 }
 
+function start_container() {
+  for i in $*
+  do
+    if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep $i)" ]]; then
+      msg "Start $i container..."
+      ci=$(docker ps -a | awk '$NF~/^'$i'*/ {print $NF}')
+      docker start $ci
+      docker exec -u root $ci bash -c "nohup /usr/bin/startup.sh > /home/wid/startup.log 2>&1 &"
+    fi
+  done
+}
+
+function stop_container() {
+  for i in $*
+  do
+    if [[ ! -z "$(docker ps | tail -n +2 | awk '{print $NF}' | grep $i)" ]]; then
+      msg "Stop $i container..."
+      docker stop -t0 $(docker ps -a | awk '$NF~/^'$i'*/ {print $NF}')
+    fi
+  done
+}
+
+function cleanup_container() {
+  for i in $*
+  do
+    if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep $i)" ]]; then
+      msg "Stop and rm existed $i container..."
+      docker stop -t0 $(docker ps -a | awk '$NF~/^'$i'*/ {print $NF}')
+      docker rm -f $(docker ps -a | awk '$NF~/^'$i'*/ {print $NF}')
+    fi
+  done
+}
+
+function cleanup_image() {
+  for i in $*
+  do
+    if [[ ! -z "$(docker images | tail -n +2 | awk '{print $1}' | grep $i)" ]]; then
+      msg "Remove image $i ..."
+      docker rmi $(docker image list | awk '$1~/^'$i'*/ {print $1}')
+    fi
+  done
+}
+
 function build() {
-  local ai_tools="false"
+  local ai_build="false"
+  local full_ai_build="false"
   local magic=intel
 
   local help=$(
@@ -13,16 +60,21 @@ function build() {
 Usage: $SELF build [-a <ai-tools>]
   Build LIC for celadon ivi
 
-  -a <ai-tools>:      enable ai tools, default: $ai_tools 
+  -a <ai-build>:      enable ai build, default: $ai_build
+  -A <full_ai-build>: enable full ai build, default: $full_ai_build
   -m <magic>:         Magic. Default: $magic
   -h:                 print the usage message
 EOF
   )
 
-  while getopts 'am:h' opt; do
+  while getopts 'aAm:h' opt; do
     case $opt in
     a)
-      ai_tools="true"
+      ai_build="true"
+      ;;
+    A)
+      ai_build="true"
+      full_ai_build="true"
       ;;
     m)
       magic=$OPTARG
@@ -34,7 +86,8 @@ EOF
   done
 
   echo "Build LIC:"
-  echo "ai_tools=$ai_tools"
+  echo "ai_build=$ai_build"
+  echo "full_ai_build=$full_ai_build"
   echo "magic=$magic"
 
   uninstall
@@ -50,35 +103,27 @@ EOF
     sleep 20
   fi
 
-  msg "build devicemanager docker image"
-  cat /vendor/etc/docker/dm.tar | docker build - --network=host --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t dm
+  msg "build gamecore docker"
+  cat /vendor/etc/docker/gamecore.tar | docker build - --network=host --build-arg MAGIC=$magic --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t liccore --target liccore
+  cat /vendor/etc/docker/gamecore.tar | docker build - --network=host --build-arg MAGIC=$magic --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t gamecore
 
-  if [ $ai_tools == "true" ]; then
-    msg "building steam docker with Intel tensorflow extension for GPU"
-    cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg MAGIC=$magic --build-arg SETUP_AI_TOOLS=true --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
-  else
-    msg "build steam docker"
-    cat /vendor/etc/docker/weston-in-docker.tar | docker build - --network=host --build-arg MAGIC=$magic --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t steam
+  if [ $ai_build == "true" ]; then
+    msg "building aicore container with Intel tensorflow extension for GPU"
+    if [ $full_ai_build == "true" ]; then
+      ai_opts="--build-arg SETUP_AI_TOOLS=true"
+    fi
+    cat /vendor/etc/docker/aicore.tar | docker build - --network=host $ai_opts --build-arg MAGIC=$magic --build-arg http_proxy=$http_proxy --build-arg https_proxy=$https_proxy --build-arg no_proxy=localhost -t aicore
   fi
+
   msg "Done!"
 }
 
-function cleanup_container() {
-  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep $1)" ]]; then
-    msg "Stop and rm existed $1 container(Keep the image as it will be used in 'docker create')..."
-    docker stop $(docker ps -a | awk '$NF~/^'$1'*/ {print $NF}')
-    sync
-    docker rm -f $(docker ps -a | awk '$NF~/^'$1'*/ {print $NF}')
-    sync
-  fi
-}
-
 function install() {
+  local ai_build="false"
   local backend="drm"
   local device="/dev/dri/renderD128"
   local size="1920x1080"
   local privileged="false"
-  local number=$(getprop persist.lic.number)
   local mem_total=$(expr $(cat /proc/meminfo | grep MemTotal | awk '{print $2}') / 1024 / 1024)
   memory_size=${mem_total}g
 
@@ -89,19 +134,18 @@ function install() {
     device="/dev/dri/renderD129"
   fi
 
-  if [ -z $number ]; then
-    number=1
+  if [[ ! -z "$(docker images | tail -n +2 | awk '{print $1}' | grep aicore)" ]]; then
+    ai_build="true"
   fi
 
   local help=$(
     cat <<EOF
-Usage: $SELF install [-b <backend>] [-s <size>] [-p] [-n <number>] [m <memory_size>]
+Usage: $SELF install [-b <backend>] [-s <size>] [-p] [m <memory_size>]
   Install LIC for android ivi
 
   -b <backend>:       weston backend, default: $backend
   -s <size>:          resolution of LIC in headless backend, default: $size
   -p:                 create container with privileged mode
-  -n <number>:        LIC instance number, default: $number
   -m <memory_size>    Memory size(a positive integer, followed by a suffix of b, k, m, g, to indicate bytes, kilobytes, megabytes, or gigabytes). Maximum and default: $memory_size
   -h:                 print the usage message
 EOF
@@ -118,9 +162,6 @@ EOF
     p)
       privileged="true"
       ;;
-    n)
-      number=$OPTARG
-      ;;
     m)
       memory_size=$OPTARG
       ;;
@@ -135,7 +176,6 @@ EOF
   IFS="x" read width height <<<"$size"
 
   echo "Install LIC:"
-  echo "number = $number"
   echo "backend = $backend"
   echo "memory_size = $memory_size"
   if [ $backend == "headless" ]; then
@@ -145,72 +185,44 @@ EOF
     echo "device = $device"
   fi
 
-  cleanup_container dm
-  cleanup_container steam
+  cleanup_container $CORECONTAINERS
 
-  msg "create dm container..."
-  docker create --name dm --privileged -v /dev/binder:/dev/binder dm
-
-  msg "create steam container with $backend backend..."
-
-  create_opts="-ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ --shm-size 8G --user wid --memory=$memory_size"
-
+  msg "create gamecore container with $backend backend..."
+  create_opts="-ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -v /dev/binder:/dev/binder -v /data/docker/sys/class/power_supply:/sys/class/power_supply -v /data/docker/config/99-ignore-mouse.rules:/etc/udev/rules.d/99-ignore-mouse.rules -v /data/docker/config/99-ignore-keyboard.rules:/etc/udev/rules.d/99-ignore-keyboard.rules --shm-size 8G --user wid --memory=$memory_size"
   if [ $backend == "drm" ]; then
-    create_opts="$create_opts --privileged -v /data/docker/steam:/home/wid/.steam --name steam --hostname steam"
-    docker create $create_opts steam
+    create_opts="$create_opts --privileged -v /data/docker/steam:/home/wid/.steam --name gamecore --hostname gamecore"
+    docker create $create_opts gamecore
   elif [ $backend == "headless" ]; then
     rm -rf -v /data/docker/image/workdir/ipc
     mkdir -p -v /data/docker/image/workdir/ipc
-    create_opts="$create_opts -e BACKEND=$backend -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -e HEADLESS=true -e CONTAINER_NUM=$number -v /data/docker/image/workdir/ipc:/workdir/ipc --ulimit nofile=524288:524288"
-
-    if [ $number -gt 1 ]; then
-      for i in $(seq 0 $(expr $number - 1)); do
-        mkdir -p /data/docker/steam$i
-        delta_opts="$create_opts -v /data/docker/steam$i:/home/wid/.steam -e CONTAINER_ID=$i --name steam$i --hostname steam$i"
-        if [ $privileged == "true" ]; then
-          docker create $delta_opts --privileged steam
-        else
-          docker create $delta_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN steam
-        fi
-      done
+    create_opts="$create_opts -e BACKEND=$backend -e DEVICE=$device -e K8S_ENV_DISPLAY_RESOLUTION_X=$width -e K8S_ENV_DISPLAY_RESOLUTION_Y=$height -e HEADLESS=true -v /data/docker/image/workdir/ipc:/workdir/ipc --ulimit nofile=524288:524288"
+    create_opts="$create_opts -v /data/docker/steam:/home/wid/.steam -e CONTAINER_ID=0 --name gamecore --hostname gamecore"
+    if [ $privileged == "true" ]; then
+      docker create $create_opts --privileged gamecore
     else
-      create_opts="$create_opts -v /data/docker/steam:/home/wid/.steam -e CONTAINER_ID=0 --name steam --hostname steam"
-      if [ $privileged == "true" ]; then
-        docker create $create_opts --privileged steam
-      else
-        docker create $create_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN steam
-      fi
+      docker create $create_opts --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN gamecore
     fi
+  fi
+
+  if [ $ai_build == "true" ]; then
+    msg "create aicore container..."
+    docker create -ti --network=host -e http_proxy=$http_proxy -e https_proxy=$https_proxy -v /dev/binder:/dev/binder -v /data/vendor/neuralnetworks/:/home/wid/.ipc/ --user wid --memory=$memory_size --name aicore --hostname aicore --security-opt seccomp=unconfined --security-opt apparmor=unconfined --device-cgroup-rule='a *:* rmw' -v /sys:/sys:rw --device $device --device /dev/snd --device /dev/tty0 --device /dev/tty1 --device /dev/tty2 --device /dev/tty3 --cap-add=NET_ADMIN --cap-add=SYS_ADMIN aicore
   fi
 
   msg "Done!"
 }
 
 function uninstall() {
-  if [[ ! -z "$(docker ps -a | tail -n +2 | awk '{print $NF}' | grep steam)" ]]; then
-    msg "Delete existed LIC container and image..."
-    docker stop $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
-    sync
-    docker rm -f $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
-    sync
-    docker rmi $(docker image list | awk '$1~/^steam*/ {print $1}')
-    sync
-  fi
+  cleanup_container $CORECONTAINERS
+  cleanup_image $COREIMAGES
 }
 
 function start() {
-  docker start dm
-  sleep 1
-  docker start $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
-  for name in $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
-  do
-    docker exec -u root $name bash -c "nohup /usr/bin/startup.sh > /home/wid/startup.log 2>&1 &"
-  done
+  start_container $CORECONTAINERS
 }
 
 function stop() {
-  docker stop -t 0 dm
-  docker stop -t 0 $(docker ps -a | awk '$NF~/^steam*/ {print $NF}')
+  stop_container $CORECONTAINERS
 }
 
 function main() {
